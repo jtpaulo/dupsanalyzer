@@ -1,6 +1,6 @@
 # Duplicates analyzer
 
-Dupsanalyzer is a tool that can be used for processing a specific real dataset and extracting statistics regarding duplicate content. The tool is based on DEDISgen code wirtten by me and on the rabin fingerprinting code written by Joel Lawrence Tucci.
+Dupsanalyzer is a tool that can be used for processing a specific real dataset and extracting statistics regarding duplicate content. The tool is based on DEDISgen code written by me and on the Rabin fingerprinting code written by Joel Lawrence Tucci.
 
 The main novelty of Dupsanalyzer over DEDISgen is that it also allows analyzing data with variable sized fingerprints (Rabin fingerprints). On the other hand, if you intend to generate a distribution for running with DEDISbench (a realistic benchmark for deduplication systems) you should use DEDISgen, because DEDISbench is designed for fixed-size block distributions.
 
@@ -36,11 +36,11 @@ For more information about the Rabin Fingerprints you may visit:
 
 # Examples
 
-generate duplicate statistics for files in folder /dir/duplicates/ and its subfolders. Use Rabin finderprints with a size of 4096 and Fixed-size blocks with a size of 1024 and 4096 bytes.
+generate duplicate statistics for files in folder /dir/duplicates/ and its subfolders. Use Rabin fingerprints with a size of 4096 and Fixed-size blocks with a size of 1024 and 4096 bytes.
 
 ./Dupsanalyzer -f -p/dir/duplicates/ -o/dir/dist_file -r1024 -b1024,4096
 
-generate duplicate distribution file /dir/dist_file for device /path/device. Analyse for a size of 4096 . A file dist_file4096 and dist_file8192 will be created.
+generate duplicate distribution file /dir/dist_file for device /path/device. Analyze for a size of 4096 . A file dist_file4096 and dist_file8192 will be created.
 
 ./Dupsanalyzer -d -p/path/device -o/dir/dist_file -r4096
 
