@@ -42,6 +42,12 @@ struct rab_block_info **cur_block;
 #define PRINTDB "gendbs/printdb/"
 #define DUPLICATEDB "gendbs/duplicatedb/"
 
+//blocks avoided when EOF is reached and the size of the block does not fit
+uint64_t *incomplete_blocks;
+
+//space consumed by incomplete blocks
+uint64_t *incomplete_space;
+
 
 //total blocks scanned
 uint64_t *total_blocks;
@@ -266,6 +272,7 @@ int extract_blocks(char* filename){
         	 int size_proced=0;
         	 unsigned char *block_proc;
 
+           
         	 while(aux-size_proced>=size_block){
 
         		 block_proc=malloc(size_block);
@@ -280,6 +287,13 @@ int extract_blocks(char* filename){
 
         		 size_proced+=size_block;
         	 }
+
+
+           if(aux-size_proced > 0){
+            incomplete_blocks[curr_sizes_proc]++;
+            incomplete_space[curr_sizes_proc]+=aux-size_proced;
+           }
+
 
         	 curr_sizes_proc++;
        	 }
@@ -303,22 +317,6 @@ int extract_blocks(char* filename){
         	  printf("Initializing rabin block %d\n",curr_sizes_proc_rabin);
               cur_block[curr_sizes_proc_rabin]=init_empty_block();
            }
-
-           //We ended on a border, gen a new tail
-           if(cur_block[curr_sizes_proc_rabin]->current_poly_finished) {
-
-        	   //insert hash in berkDB
-        	   //index the block and find duplicates
-        	   check_rabin_duplicates(cur_block[curr_sizes_proc_rabin]->tail,nr_sizes_proc+curr_sizes_proc_rabin);
-
-        	   //free oldblock and polinomial
-        	   //free(cur_block[curr_sizes_proc]->tail);
-        	   cur_block[curr_sizes_proc_rabin]->tail=gen_new_polynomial(NULL,0,0,0);
-
-
-        	   cur_block[curr_sizes_proc_rabin]->current_poly_finished=0;
-           }
-
 
            block=cur_block[curr_sizes_proc_rabin];
 
@@ -354,9 +352,10 @@ int extract_blocks(char* filename){
                 	   //free(cur_block[curr_sizes_proc]->tail);
                 	   cur_block[curr_sizes_proc_rabin]->tail=gen_new_polynomial(NULL,0,0,0);
 
-                       if(i==READSIZE-1)
-                    	   cur_block[curr_sizes_proc_rabin]->current_poly_finished=1;
+                       //if(i==READSIZE-1)
+                    	   //cur_block[curr_sizes_proc_rabin]->current_poly_finished=1;
                    }
+
 
            }
 
@@ -370,9 +369,25 @@ int extract_blocks(char* filename){
          aux = pread(fd,block_read,READSIZE,off);
          off+=READSIZE;
 
+
+
       }
 
-      
+    //zero the blocks a new file is being processed 
+    int auxc=0;
+    for(auxc=0;auxc<nr_sizes_proc_rabin;auxc++){
+
+        struct rab_block_info *lastblock;
+        lastblock = cur_block[auxc];
+
+        if( lastblock->tail->length > 0){
+            incomplete_blocks[nr_sizes_proc+auxc]++;
+            incomplete_space[nr_sizes_proc+auxc]+=lastblock->tail->length;
+        }
+
+        cur_block[auxc]=NULL;
+    } 
+
     close(fd);
     }
     else{
@@ -650,6 +665,10 @@ int main (int argc, char *argv[]){
 	//Initialize variables
 	total_blocks=malloc(sizeof(uint64_t)*(nr_sizes_proc+nr_sizes_proc_rabin));
 	eq=malloc(sizeof(uint64_t)*(nr_sizes_proc+nr_sizes_proc_rabin));
+
+  incomplete_blocks=malloc(sizeof(uint64_t)*(nr_sizes_proc+nr_sizes_proc_rabin));
+  incomplete_space=malloc(sizeof(uint64_t)*(nr_sizes_proc+nr_sizes_proc_rabin));
+
 	dif=malloc(sizeof(uint64_t)*(nr_sizes_proc+nr_sizes_proc_rabin));
 	distinctdup=malloc(sizeof(uint64_t)*(nr_sizes_proc+nr_sizes_proc_rabin));
 	//zeroed_blocks=malloc(sizeof(uint64_t)*nr_sizes_proc);
@@ -709,6 +728,12 @@ int main (int argc, char *argv[]){
 
 	}
 
+
+  //initialize analyzis variables
+  bzero(incomplete_blocks,(nr_sizes_proc+nr_sizes_proc_rabin)*(sizeof(uint64_t)));
+  bzero(incomplete_space,(nr_sizes_proc+nr_sizes_proc_rabin)*(sizeof(uint64_t)));
+  
+
 	//initialize analyzis variables
 	bzero(total_blocks,(nr_sizes_proc+nr_sizes_proc_rabin)*(sizeof(uint64_t)));
 	//identical chunks (that could be eliminated)
@@ -757,12 +782,20 @@ int main (int argc, char *argv[]){
 		fprintf(stderr,"duplicate blocks %llu\n",(unsigned long long int)eq[aux]);
 		fprintf(stderr,"space saved %llu Bytes\n",(unsigned long long int)space[aux]);
 
+    fprintf(stderr,"incomplete blocks %llu\n",(unsigned long long int)incomplete_blocks[aux]);
+    fprintf(stderr,"incomplete blocks space %llu Bytes\n",(unsigned long long int)incomplete_space[aux]);
+
+
+
 		close_db(dbporiginal[aux],envporiginal[aux]);
 		//TODO this is not removed to keep the database for dedisgen-utils
 		//remove_db(duplicatedbpath,dbporiginal,envporiginal);
 	}
 
 	//free memory
+
+  free(incomplete_space);
+  free(incomplete_blocks);
 	free(total_blocks);
 	free(eq);
 	free(dif);
