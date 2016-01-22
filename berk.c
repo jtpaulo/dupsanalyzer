@@ -21,6 +21,7 @@
 //correspondent value for each hash entry at the DHT
 struct hash_value {
     uint64_t cont;
+    uint64_t size;
 };
 
 

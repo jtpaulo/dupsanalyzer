@@ -64,8 +64,10 @@ uint64_t *distinctdup;
 uint64_t *space;
 
 
+
 //number files scaneed
 uint64_t nfiles=0;
+uint64_t total_space=0;
 
 //This is the processed blocks of READSIZE so it is not an array
 uint64_t processed_blocks=0;
@@ -120,6 +122,7 @@ int check_duplicates(unsigned char* block,uint64_t bsize,int id_blocksize){
 
        //set counter to 1
        hvalue.cont=1;
+       hvalue.size=bsize;
 
        //insert into into the hashtable
        put_db(start,&hvalue,dbporiginal[id_blocksize],envporiginal[id_blocksize]);
@@ -210,6 +213,7 @@ int check_rabin_duplicates(struct rabin_polynomial *poly,int id_blocksize){
 
        //set counter to 1
        hvalue.cont=1;
+       hvalue.size=poly->length;
 
        //insert into into the hashtable
        put_db(start,&hvalue,dbporiginal[id_blocksize],envporiginal[id_blocksize]);
@@ -249,9 +253,16 @@ int extract_blocks(char* filename){
 
 	printf("Processing %s \n",filename);
     int fd = open(filename,O_RDONLY | O_LARGEFILE);
+
+
+    
     uint64_t off=0;
     if(fd){
 
+      struct stat st;
+      stat(filename, &st);
+      total_space+=st.st_size;
+      
       //declare a block
       unsigned char block_read[READSIZE];
       bzero(block_read,sizeof(block_read));
@@ -314,7 +325,7 @@ int extract_blocks(char* filename){
 
            if(cur_block[curr_sizes_proc_rabin] == NULL) {
 
-        	  printf("Initializing rabin block %d\n",curr_sizes_proc_rabin);
+        	  //printf("Initializing rabin block %d\n",curr_sizes_proc_rabin);
               cur_block[curr_sizes_proc_rabin]=init_empty_block();
            }
 
@@ -549,7 +560,7 @@ void str_split(char* a_str, int type)
         i++;
     }
 
-    printf("nrsizes rabin %d\n",nr_sizes_proc_rabin);
+    //printf("nrsizes rabin %d\n",nr_sizes_proc_rabin);
 
 }
 
@@ -691,8 +702,13 @@ int main (int argc, char *argv[]){
 
 		char printdbpath[100];
 		char duplicatedbpath[100];
-		char sizeid[5];
-		sprintf(sizeid,"%d",aux);
+		char sizeid[20];
+
+    if(aux<nr_sizes_proc){
+      sprintf(sizeid,"fixed_%d",sizes_proc[aux]);
+    }else{
+      sprintf(sizeid,"rabin_%d",sizes_proc_rabin[aux-nr_sizes_proc]);
+    }
 
 
 		//if a folder were specified for databases
@@ -772,7 +788,9 @@ int main (int argc, char *argv[]){
 			fprintf(stderr,"\n\n\nRabin Results for %d\n",sizes_proc_rabin[aux-nr_sizes_proc]);
 		else
 			fprintf(stderr,"\n\n\nFixed Size Results for %d\n",sizes_proc[aux]);
+
 		fprintf(stderr,"files scanned %llu\n",(unsigned long long int)nfiles);
+    fprintf(stderr,"space scanned %llu Bytes\n",(unsigned long long int)total_space);
 		fprintf(stderr,"total blocks scanned %llu\n",(unsigned long long int)total_blocks[aux]);
 		//fprintf(stderr,"total blocks with zeros appended %llu\n",(unsigned long long int)zeroed_blocks[aux]);
 		//blocks without any duplicate are the distinct block minus the distinct blocks with duplicates
