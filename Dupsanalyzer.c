@@ -90,9 +90,12 @@ int check_duplicates(unsigned char* block,uint64_t bsize,int id_blocksize){
   result[0]=0;
   SHA1(block, bsize,result);
 
-  //generate a visual (ASCII) representation for the hashes
+    char *hash=malloc(sizeof(char)*KEYSIZE);
+    bzero(hash,sizeof(char)*KEYSIZE);
+  
+    //generate a visual (ASCII) representation for the hashes
     char *start=malloc(sizeof(char)*41);
-    start[40]=0;
+    start[40]='\0';
     int j =0;
 
     for(j=0;j<40;j+=2)
@@ -103,6 +106,17 @@ int check_duplicates(unsigned char* block,uint64_t bsize,int id_blocksize){
 
     free(result);
 
+
+    char sizestr[10];
+    sprintf(sizestr,"%09llu",(unsigned long long int)bsize);
+    
+
+   	
+    strcpy(hash,start);
+    strcat(hash,sizestr);
+    
+    //printf("start is %s size is %s hash is %s\n",start,sizestr,hash);
+
     //one more block scanned
     total_blocks[id_blocksize]++;
 
@@ -110,7 +124,7 @@ int check_duplicates(unsigned char* block,uint64_t bsize,int id_blocksize){
     struct hash_value hvalue;
 
     //printf("before introducing in db\n");
-    int ret = get_db(start,&hvalue,dbporiginal[id_blocksize],envporiginal[id_blocksize]);
+    int ret = get_db(hash,&hvalue,dbporiginal[id_blocksize],envporiginal[id_blocksize]);
     
 
     //if hash entry does not exist
@@ -125,7 +139,7 @@ int check_duplicates(unsigned char* block,uint64_t bsize,int id_blocksize){
        hvalue.size=bsize;
 
        //insert into into the hashtable
-       put_db(start,&hvalue,dbporiginal[id_blocksize],envporiginal[id_blocksize]);
+       put_db(hash,&hvalue,dbporiginal[id_blocksize],envporiginal[id_blocksize]);
     }
     else{
 
@@ -145,16 +159,17 @@ int check_duplicates(unsigned char* block,uint64_t bsize,int id_blocksize){
         hvalue.cont++;
 
         //insert counter in the right entry
-        put_db(start,&hvalue,dbporiginal[id_blocksize],envporiginal[id_blocksize]);
+        put_db(hash,&hvalue,dbporiginal[id_blocksize],envporiginal[id_blocksize]);
 
     }
-
+    
     free(start);
-
-    processed_blocks++;
-    if(processed_blocks%100000==0){
-    	printf("processed %llu blocks\n",(long long unsigned int) processed_blocks);
-    }
+	free(hash);
+    
+     processed_blocks++;
+    //if(processed_blocks%100000==0){
+    	//printf("processed %llu blocks\n",(long long unsigned int) processed_blocks);
+    //}
 
   return 0;
 }
@@ -173,22 +188,24 @@ int check_rabin_duplicates(struct rabin_polynomial *poly,int id_blocksize){
 
 
   //generate a visual (ASCII) representation for the hashes
-    char start[41];
-    start[40]=0;
-    bzero(start,sizeof(char)*41);
+    char start[KEYSIZE];
+    start[KEYSIZE-1]=0;
+    bzero(start,sizeof(char)*KEYSIZE);
 
-    char polys[21];
-    bzero(polys,sizeof(char)*21);
-    sprintf(polys,"%llu",(unsigned long long int) poly->polynomial);
+    char polys[40];
+    bzero(polys,sizeof(char)*40);
+    sprintf(polys,"%039llu",(unsigned long long int) poly->polynomial);
 
-    char sizepol[18];
-    bzero(sizepol,sizeof(char)*18);
-    sprintf(sizepol,"%d",poly->length);
+    
+    char sizepol[10];
+    bzero(sizepol,sizeof(char)*10);
+    sprintf(sizepol,"%09d",poly->length);
 
 
     strcpy(start,polys);
     strcat(start,sizepol);
 
+    //printf(" poly is %s size is %s generated hash %s\n",polys,sizepol,start);
     /*fprintf(fp,"%s %s %s\n",polys,sizepol,start);
     fclose(fp);*/
 
@@ -251,7 +268,7 @@ int check_rabin_duplicates(struct rabin_polynomial *poly,int id_blocksize){
 //given a file extract blocks and check for duplicates
 int extract_blocks(char* filename){
 
-	printf("Processing %s \n",filename);
+	//printf("Processing %s \n",filename);
     int fd = open(filename,O_RDONLY | O_LARGEFILE);
 
 
@@ -301,8 +318,23 @@ int extract_blocks(char* filename){
 
 
            if(aux-size_proced > 0){
+
+	    
             incomplete_blocks[curr_sizes_proc]++;
             incomplete_space[curr_sizes_proc]+=aux-size_proced;
+
+
+		//process the block anyway
+		block_proc=malloc(aux-size_proced);
+                bzero(block_proc,aux-size_proced);
+
+                memcpy(block_proc,&block_read[size_proced],aux-size_proced);
+
+                //index the block and find duplicates
+                check_duplicates(block_proc,aux-size_proced,curr_sizes_proc);
+                free(block_proc);
+
+	
            }
 
 
@@ -392,9 +424,16 @@ int extract_blocks(char* filename){
         lastblock = cur_block[auxc];
 
         if( lastblock->tail->length > 0){
-            incomplete_blocks[nr_sizes_proc+auxc]++;
-            incomplete_space[nr_sizes_proc+auxc]+=lastblock->tail->length;
-        }
+            
+	    if(lastblock->tail->length < sizes_proc_rabin[auxc]/2 ){
+	        incomplete_blocks[nr_sizes_proc+auxc]++;
+            	incomplete_space[nr_sizes_proc+auxc]+=lastblock->tail->length;
+            }
+	    //insert hash in berkDB
+            //index the block and find duplicates
+            check_rabin_duplicates(lastblock->tail,nr_sizes_proc+auxc);
+
+	}
 
         cur_block[auxc]=NULL;
     } 
@@ -409,6 +448,20 @@ int extract_blocks(char* filename){
 
   return 0;
 
+}
+
+int is_regular_file(const char *path)
+{
+    struct stat path_stat;
+    stat(path, &path_stat);
+    return S_ISREG(path_stat.st_mode);
+}
+
+int is_directory(const char *path)
+{
+    struct stat path_stat;
+    stat(path, &path_stat);
+    return S_ISDIR(path_stat.st_mode);
 }
 
 //search a directory for files inside and return the number of files found and their path(nfiles,lfiles)
@@ -431,17 +484,21 @@ int search_dir(char* path){
          strcpy(newpath,path);
          strcat(newpath,dp->d_name);
 
-         if(dp->d_type==DT_DIR){
+         if(is_directory(newpath)){
                strcat(newpath,"/");
                // recursively process the files inside the diretory
                search_dir(newpath);
          }
          else{
-            if(dp->d_type==DT_REG){
+            if(is_regular_file(newpath)){
             	//If it is a regular file then start segmenting files and indexing blocks
 
             	extract_blocks(newpath);
             	nfiles++;
+
+		if(nfiles%1000000==0){
+			printf("Processed %llu files",(unsigned long long int)nfiles);
+		}
 
             }
 
@@ -790,8 +847,8 @@ int main (int argc, char *argv[]){
 			fprintf(stderr,"\n\n\nFixed Size Results for %d\n",sizes_proc[aux]);
 
 		fprintf(stderr,"files scanned %llu\n",(unsigned long long int)nfiles);
-    fprintf(stderr,"space scanned %llu Bytes\n",(unsigned long long int)total_space);
-		fprintf(stderr,"total blocks scanned %llu\n",(unsigned long long int)total_blocks[aux]);
+    fprintf(stderr,"space scanned %llu Bytes (including incomplete blocks)\n",(unsigned long long int)total_space);
+		fprintf(stderr,"Complete and Incomplete Block statistics:\ntotal blocks scanned %llu\n",(unsigned long long int)total_blocks[aux]);
 		//fprintf(stderr,"total blocks with zeros appended %llu\n",(unsigned long long int)zeroed_blocks[aux]);
 		//blocks without any duplicate are the distinct block minus the distinct blocks with duplicates
 		uint64_t zerodups=dif[aux]-distinctdup[aux];
@@ -800,7 +857,7 @@ int main (int argc, char *argv[]){
 		fprintf(stderr,"duplicate blocks %llu\n",(unsigned long long int)eq[aux]);
 		fprintf(stderr,"space saved %llu Bytes\n",(unsigned long long int)space[aux]);
 
-    fprintf(stderr,"incomplete blocks %llu\n",(unsigned long long int)incomplete_blocks[aux]);
+    fprintf(stderr,"Incomplete Block statistics:\nincomplete blocks %llu\n",(unsigned long long int)incomplete_blocks[aux]);
     fprintf(stderr,"incomplete blocks space %llu Bytes\n",(unsigned long long int)incomplete_space[aux]);
 
 

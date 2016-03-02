@@ -18,11 +18,15 @@
 #include <signal.h>
 #include <db.h>
 
+#define KEYSIZE 51
+
 //correspondent value for each hash entry at the DHT
 struct hash_value {
     uint64_t cont;
     uint64_t size;
 };
+
+
 
 
 //************************************************* DB functions ********************************
@@ -168,7 +172,7 @@ int put_db(char* hash, struct hash_value *hvalue,DB **dbp, DB_ENV **envp){
   memset(&key, 0, sizeof(DBT));
   memset(&data, 0, sizeof(DBT));
   key.data = hash;
-  key.size = sizeof(char)*41;
+  key.size = sizeof(char)*KEYSIZE;
   data.data = hvalue;
   data.size = sizeof(struct hash_value);  
   
@@ -218,7 +222,7 @@ int get_db(char *hash, struct hash_value *hvalue,DB **dbp, DB_ENV **envp){
   memset(&key1, 0, sizeof(DBT));
   memset(&data1, 0, sizeof(DBT));
   key1.data = hash;
-  key1.size = sizeof(char)*41;
+  key1.size = sizeof(char)*KEYSIZE;
   
   data1.data = hvalue;
   data1.ulen = sizeof(struct hash_value);
